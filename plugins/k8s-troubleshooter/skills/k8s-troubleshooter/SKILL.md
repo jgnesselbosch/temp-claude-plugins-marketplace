@@ -17,6 +17,7 @@ Interactive Kubernetes cluster troubleshooting skill with declarative change tra
 1. ❌ NEVER create files in the current working directory (it's usually a git repo!)
 2. ❌ NEVER use Write tool with paths like `C:\Users\...\dev\git\...`
 3. ❌ NEVER create `k8s-changes-*.yaml`, `backup-*.yaml`, or `fixed-*.yaml` in working directory
+4. ❌ NEVER ask user for permission for READ-ONLY operations (kubectl get, describe, logs, top, config view)
 
 **ALWAYS DO THESE:**
 1. ✅ ALWAYS create a session temp directory FIRST: `/tmp/k8s-troubleshooter/YYYYMMDD-HHMMSS-TICKET/`
@@ -25,6 +26,7 @@ Interactive Kubernetes cluster troubleshooting skill with declarative change tra
 4. ✅ At session end, tell user where the temp directory is located
 5. ✅ ALWAYS use Write tool to create fixed manifests (AI-driven, not manual editing)
 6. ✅ ALWAYS clean Kubernetes metadata (resourceVersion, uid, status) from fixed manifests
+7. ✅ ALWAYS execute READ-ONLY kubectl commands immediately without asking (get, describe, logs, top, config view, etc.)
 
 **Quick Start Checklist:**
 - [ ] Create session temp directory
@@ -114,7 +116,15 @@ Always start by detecting the shell environment and initializing the session:
 4. **Silently perform read-only cluster checks** (no user confirmation needed):
    - Check cluster access: `kubectl cluster-info`
    - Identify available contexts: `kubectl config get-contexts`
-   - Read-only operations like `kubectl get`, `kubectl describe`, `kubectl logs` require NO user approval
+   - **CRITICAL**: Read-only operations require ZERO user approval - execute immediately:
+     * `kubectl get` (any resource)
+     * `kubectl describe` (any resource)
+     * `kubectl logs` (any pod/container)
+     * `kubectl top` (nodes/pods)
+     * `kubectl config view`
+     * `kubectl config get-contexts`
+     * `kubectl cluster-info`
+     * Any other inspection/viewing command that does NOT modify cluster state
 
 5. **Initialize change tracking file and temp directory**:
    - **CRITICAL**: ALL session files (backups, changes, fixed manifests) MUST be created in temp directories, NEVER in the git repository!
@@ -180,19 +190,24 @@ For specific components:
 
 ### 3. Change Management Protocol
 
-**CRITICAL**: Every WRITE operation must be:
-1. Discussed with user before execution (only for write operations like `kubectl apply`, `kubectl delete`, etc.)
+**CRITICAL DISTINCTION - AI AGENT MUST FOLLOW:**
+
+**READ operations require ZERO user confirmation - EXECUTE IMMEDIATELY:**
+- `kubectl get` (any resource, any namespace)
+- `kubectl describe` (any resource, any namespace)
+- `kubectl logs` (any pod/container)
+- `kubectl top` (nodes/pods)
+- `kubectl config view`
+- `kubectl config get-contexts`
+- `kubectl cluster-info`
+- Any cluster inspection/viewing command that does NOT modify state
+- **NEVER ask permission for these - just do it!**
+
+**WRITE operations MUST be discussed with user BEFORE execution:**
+1. Discussed with user before execution (only for write operations like `kubectl apply`, `kubectl delete`, `kubectl patch`, `kubectl edit`, `kubectl scale`, etc.)
 2. Recorded in declarative YAML format
 3. Appended to session change file in temp directory
 4. Executable via `kubectl apply`
-
-**READ operations require NO user confirmation**:
-- `kubectl get`
-- `kubectl describe`
-- `kubectl logs`
-- `kubectl top`
-- `kubectl config view`
-- Any cluster inspection command
 
 **Use scripts for automatic change tracking:**
 - Bash: `scripts/track_change.sh`
@@ -475,26 +490,30 @@ Write-Host "Session directory: $sessionDir"
 
 ## Critical Rules
 
-1. **Never apply write operations without user confirmation** (read operations need no confirmation)
-2. **Always maintain declarative YAML record for changes**
-3. **Group related changes in single manifests**
-4. **Include resource versions for update operations**
-5. **Add comments explaining each change**
-6. **Test changes in dev/staging first if possible**
-7. **CRITICAL: ALL session files MUST be created in temp directories ONLY**
+1. **NEVER ask user permission for READ operations - execute immediately!**
+   - `kubectl get`, `describe`, `logs`, `top`, `config view`, `cluster-info` - just do it!
+   - Read operations need ZERO confirmation
+2. **ALWAYS ask user confirmation BEFORE WRITE operations**
+   - `kubectl apply`, `delete`, `patch`, `edit`, `scale` - require user approval
+3. **Always maintain declarative YAML record for changes**
+4. **Group related changes in single manifests**
+5. **Include resource versions for update operations**
+6. **Add comments explaining each change**
+7. **Test changes in dev/staging first if possible**
+8. **CRITICAL: ALL session files MUST be created in temp directories ONLY**
    - Linux/Mac: Use `/tmp/k8s-troubleshooter/` directory
    - Windows: Use `$env:TEMP\k8s-troubleshooter\` directory
    - NEVER create k8s-changes-*.yaml, backup-*.yaml, or fixed-*.yaml files in the current working directory or git repository
    - Prevents accidental commits of session files
-8. **Be concise and efficient**:
+9. **Be concise and efficient**:
    - DO NOT display GitOps warnings for local/dev environments
    - DO NOT ask for Jira tickets for local/dev environments
    - DO NOT show verbose output unless debugging requires it
    - Only show critical information and actionable items
-   - Silently perform all read-only operations
-9. **Session file finalization**:
-   - At session end, inform user where their session files are located in temp directory
-   - Only display GitOps integration instructions if in production or user requests it
+   - Silently perform all read-only operations WITHOUT asking
+10. **Session file finalization**:
+    - At session end, inform user where their session files are located in temp directory
+    - Only display GitOps integration instructions if in production or user requests it
 
 ## Error Recovery
 

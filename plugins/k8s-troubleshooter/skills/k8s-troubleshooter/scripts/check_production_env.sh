@@ -22,6 +22,7 @@ PROD_INDICATORS=(
     "prd"
     "live"
     "master"
+    "docker-desktop"
 )
 
 # Check if environment is production

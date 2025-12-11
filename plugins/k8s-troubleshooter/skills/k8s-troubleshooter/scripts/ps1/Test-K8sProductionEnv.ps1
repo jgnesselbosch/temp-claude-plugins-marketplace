@@ -39,7 +39,8 @@ $prodIndicators = @(
     "production",
     "prd",
     "live",
-    "master"
+    "master",
+    "docker-desktop"
 )
 
 # Check if environment is production
