@@ -18,6 +18,7 @@ Interactive Kubernetes cluster troubleshooting skill with declarative change tra
 2. ❌ NEVER use Write tool with paths like `C:\Users\...\dev\git\...`
 3. ❌ NEVER create `k8s-changes-*.yaml`, `backup-*.yaml`, or `fixed-*.yaml` in working directory
 4. ❌ NEVER ask user for permission for READ-ONLY operations (kubectl get, describe, logs, top, config view)
+5. ❌ NEVER ask user for permission to initialize session directory or manage session files
 
 **ALWAYS DO THESE:**
 1. ✅ ALWAYS create a session temp directory FIRST: `/tmp/k8s-troubleshooter/YYYYMMDD-HHMMSS-TICKET/`
@@ -27,6 +28,7 @@ Interactive Kubernetes cluster troubleshooting skill with declarative change tra
 5. ✅ ALWAYS use Write tool to create fixed manifests (AI-driven, not manual editing)
 6. ✅ ALWAYS clean Kubernetes metadata (resourceVersion, uid, status) from fixed manifests
 7. ✅ ALWAYS execute READ-ONLY kubectl commands immediately without asking (get, describe, logs, top, config view, etc.)
+8. ✅ ALWAYS execute session management operations immediately without asking (mkdir, creating change tracking files, backups in temp dir)
 
 **Quick Start Checklist:**
 - [ ] Create session temp directory
@@ -40,6 +42,8 @@ Interactive Kubernetes cluster troubleshooting skill with declarative change tra
 ### 1. Session Initialization
 
 **MANDATORY START PROCEDURE - NEVER SKIP THIS!**
+
+**IMPORTANT: Session initialization requires NO user permission - execute all steps automatically!**
 
 Always start by detecting the shell environment and initializing the session:
 
@@ -128,6 +132,7 @@ Always start by detecting the shell environment and initializing the session:
 
 5. **Initialize change tracking file and temp directory**:
    - **CRITICAL**: ALL session files (backups, changes, fixed manifests) MUST be created in temp directories, NEVER in the git repository!
+   - **NO USER PERMISSION NEEDED**: Session initialization, directory creation, and all file operations in temp directories require ZERO user approval - just do it automatically!
 
    **For Bash shell (Linux/Mac/WSL - NOT Git Bash on Windows):**
    ```bash
@@ -192,18 +197,29 @@ For specific components:
 
 **CRITICAL DISTINCTION - AI AGENT MUST FOLLOW:**
 
-**READ operations require ZERO user confirmation - EXECUTE IMMEDIATELY:**
-- `kubectl get` (any resource, any namespace)
-- `kubectl describe` (any resource, any namespace)
-- `kubectl logs` (any pod/container)
-- `kubectl top` (nodes/pods)
-- `kubectl config view`
-- `kubectl config get-contexts`
-- `kubectl cluster-info`
-- Any cluster inspection/viewing command that does NOT modify state
-- **NEVER ask permission for these - just do it!**
+**NO USER PERMISSION NEEDED - EXECUTE IMMEDIATELY:**
 
-**WRITE operations MUST be discussed with user BEFORE execution:**
+1. **READ operations** (kubectl read-only commands):
+   - `kubectl get` (any resource, any namespace)
+   - `kubectl describe` (any resource, any namespace)
+   - `kubectl logs` (any pod/container)
+   - `kubectl top` (nodes/pods)
+   - `kubectl config view`
+   - `kubectl config get-contexts`
+   - `kubectl cluster-info`
+   - Any cluster inspection/viewing command that does NOT modify state
+
+2. **SESSION MANAGEMENT operations** (all file operations in temp directories):
+   - Creating session temp directory: `mkdir -p /tmp/k8s-troubleshooter/...` or `New-Item -ItemType Directory`
+   - Initializing change tracking file: creating `k8s-changes.yaml` in temp dir
+   - Writing backup files: creating `backup-*.yaml` in temp dir
+   - Writing fixed manifests: creating `fixed-*.yaml` in temp dir
+   - Any file operations within `/tmp/k8s-troubleshooter/` or `$env:TEMP\k8s-troubleshooter\`
+   - Appending changes to session change tracking file
+
+**NEVER ask permission for operations above - just do them automatically!**
+
+**WRITE operations to K8s cluster MUST be discussed with user BEFORE execution:**
 1. Discussed with user before execution (only for write operations like `kubectl apply`, `kubectl delete`, `kubectl patch`, `kubectl edit`, `kubectl scale`, etc.)
 2. Recorded in declarative YAML format
 3. Appended to session change file in temp directory
@@ -417,7 +433,7 @@ See references/argocd-troubleshooting.md for sync strategies.
 
 ## Session Finalization
 
-**At session end (concise summary only)**:
+**At session end, ALWAYS display this information**:
 
 1. **Display brief summary**:
    - Total changes made
@@ -427,19 +443,44 @@ See references/argocd-troubleshooting.md for sync strategies.
    ```
    ✅ Issue resolved!
 
-   Session files: C:\Users\...\AppData\Local\Temp\k8s-troubleshooter\20251208-161143\
+   Session files: /tmp/k8s-troubleshooter/20251211-143022-NO-TICKET/
    - Changes tracked: k8s-changes.yaml
    - Backups: backup-*.yaml
+   - Fixed manifests: fixed-*.yaml
    ```
 
-2. **For production environments only**:
-   - Show GitOps integration instructions
-   - Remind about repository commit requirements
-   - Update Jira ticket with changes
+2. **CRITICAL WARNING - ALWAYS DISPLAY AT SESSION END (regardless of environment)**:
 
-3. **DO NOT show**:
-   - Lengthy German warnings for local/dev
-   - Jira integration steps for local/dev
+   ```
+   ╔══════════════════════════════════════════════════════════════╗
+   ║                                                              ║
+   ║  ⚠️  CRITICAL: GITOPS REPOSITORY UPDATE REQUIRED! ⚠️         ║
+   ║                                                              ║
+   ╚══════════════════════════════════════════════════════════════╝
+
+   ALL CLUSTER CHANGES MUST BE COMMITTED TO GITOPS REPOSITORY!
+
+   For every change applied to the cluster:
+   1. CREATE declarative YAML manifests (use fixed-*.yaml from session dir)
+   2. COMMIT manifests to your GitOps repository
+   3. ENSURE ArgoCD/FluxCD will sync these changes
+   4. VERIFY the GitOps pipeline picks up your changes
+
+   Session directory contains:
+   - k8s-changes.yaml: Complete change log
+   - fixed-*.yaml: Ready-to-commit manifests
+   - backup-*.yaml: Rollback files
+
+   ⚠️  WITHOUT GITOPS COMMIT, YOUR CHANGES WILL BE LOST ON NEXT SYNC! ⚠️
+   ```
+
+3. **For production environments only** (additional to the warning above):
+   - Show Jira ticket update instructions
+   - Remind about change request documentation
+   - Link to post-incident review process
+
+4. **DO NOT show**:
+   - Lengthy German warnings for local/dev (the English warning above is sufficient)
    - Verbose repository instructions unless production
 
 ## PowerShell Compatibility
@@ -493,8 +534,15 @@ Write-Host "Session directory: $sessionDir"
 1. **NEVER ask user permission for READ operations - execute immediately!**
    - `kubectl get`, `describe`, `logs`, `top`, `config view`, `cluster-info` - just do it!
    - Read operations need ZERO confirmation
-2. **ALWAYS ask user confirmation BEFORE WRITE operations**
+2. **NEVER ask user permission for SESSION MANAGEMENT operations - execute immediately!**
+   - Creating session temp directories (`mkdir -p /tmp/k8s-troubleshooter/...`)
+   - Creating/writing session files in temp directories (backups, change tracking, fixed manifests)
+   - Initializing change tracking file
+   - Any file operations within session temp directory
+   - Session management needs ZERO confirmation
+3. **ALWAYS ask user confirmation BEFORE WRITE operations to Kubernetes cluster**
    - `kubectl apply`, `delete`, `patch`, `edit`, `scale` - require user approval
+   - Cluster modifications require explicit user approval
 3. **Always maintain declarative YAML record for changes**
 4. **Group related changes in single manifests**
 5. **Include resource versions for update operations**
