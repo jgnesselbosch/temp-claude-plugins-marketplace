@@ -1,6 +1,6 @@
 ---
 name: k8s-troubleshooter
-description: Comprehensive Kubernetes cluster troubleshooting skill for interactive problem-solving with Claude Code. Handles debugging and fixes for pods, services, deployments, Tekton pipelines, Crossplane XRs, and ArgoCD applications across namespaces. Tracks all changes declaratively in YAML format, integrates with Jira for documentation, and ensures GitOps-compliant workflows. Use when debugging Kubernetes issues, fixing cluster problems, or needing systematic K8s troubleshooting with full change tracking.
+description: Kubernetes cluster troubleshooting skill for interactive problem-solving with Claude Code. Handles debugging and fixes for pods, services, deployments, Tekton pipelines, Crossplane XRs, and ArgoCD applications across namespaces. Tracks all changes declaratively in YAML format, integrates with Jira for documentation, and ensures GitOps-compliant workflows. Use when debugging Kubernetes issues, fixing cluster problems, or needing systematic K8s troubleshooting with full change tracking.
 ---
 
 
@@ -523,3 +523,4 @@ kubectl rollout undo deployment/<name> -n <namespace>
 - **Jira API**: See scripts/jira_integration.py
 - **Bitbucket Webhook**: Trigger on manifest commits
 - **Slack Notifications**: Optional alerting via scripts/notify_slack.sh
+
