@@ -9,10 +9,11 @@
       "name": "k8s-troubleshooter",
       "source": "./plugins/k8s-troubleshooter",
       "description": "K8s Troubleshooting Plugin",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "author": {
         "name": "DSIPL1 DevOps Team"
       }
     }
   ]
 }
+
