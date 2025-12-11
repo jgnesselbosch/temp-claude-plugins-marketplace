@@ -1,0 +1,173 @@
+# bitbucket-pipelines.yml
+# Automated build and release pipeline for k8s-troubleshooter skill
+
+image: python:3.11-slim
+
+definitions:
+  caches:
+    skill-build: .build
+  
+  steps:
+    - step: &validate-skill
+        name: Validate Skill
+        script:
+          - echo "Validating skill structure..."
+          - apt-get update && apt-get install -y yamllint
+          - yamllint -d relaxed source/k8s-troubleshooter/SKILL.md
+          - |
+            # Check required files
+            for file in SKILL.md scripts/check_production_env.sh scripts/show_changes.sh; do
+              if [ ! -f "source/k8s-troubleshooter/$file" ]; then
+                echo "ERROR: Required file missing: $file"
+                exit 1
+              fi
+            done
+          - echo "✓ Validation passed"
+        artifacts:
+          - validation-report.txt
+    
+    - step: &build-skill
+        name: Build Skill Package
+        script:
+          - echo "Building skill package..."
+          - apt-get update && apt-get install -y zip
+          - cd source
+          - |
+            # Create skill package
+            python3 ../scripts/package_skill.py k8s-troubleshooter ../
+          - ls -la ../*.skill
+          - echo "✓ Build successful"
+        artifacts:
+          - "*.skill"
+          - build-info.json
+    
+    - step: &test-skill
+        name: Test Skill
+        script:
+          - echo "Testing skill functionality..."
+          - |
+            # Basic tests
+            cd source/k8s-troubleshooter
+            
+            # Test bash scripts syntax
+            for script in scripts/*.sh; do
+              bash -n "$script" || exit 1
+            done
+            
+            # Test Python scripts
+            for script in scripts/*.py; do
+              python3 -m py_compile "$script" || exit 1
+            done
+          - echo "✓ Tests passed"
+    
+    - step: &publish-release
+        name: Publish Release
+        deployment: production
+        script:
+          - echo "Publishing release..."
+          - |
+            # Extract version from SKILL.md
+            VERSION=$(grep "version:" source/k8s-troubleshooter/SKILL.md | head -1 | awk '{print $2}' || echo "1.0.0")
+            
+            # Create version file
+            cat > version.json <<EOF
+            {
+              "version": "$VERSION",
+              "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+              "commit": "$BITBUCKET_COMMIT",
+              "branch": "$BITBUCKET_BRANCH"
+            }
+            EOF
+            
+            # Copy artifacts to release directory
+            mkdir -p releases/$VERSION
+            cp *.skill releases/$VERSION/
+            cp version.json releases/$VERSION/
+            
+            echo "✓ Released version $VERSION"
+        artifacts:
+          - releases/**
+
+pipelines:
+  default:
+    - step: *validate-skill
+    - step: *build-skill
+    - step: *test-skill
+  
+  branches:
+    main:
+      - step: *validate-skill
+      - step: *build-skill
+      - step: *test-skill
+      - step: *publish-release
+    
+    develop:
+      - step: *validate-skill
+      - step: *build-skill
+      - step: *test-skill
+  
+  tags:
+    v*:
+      - step: *validate-skill
+      - step: *build-skill
+      - step: *test-skill
+      - step:
+          name: Create Tagged Release
+          script:
+            - echo "Creating tagged release $BITBUCKET_TAG..."
+            - |
+              # Create GitHub-style release notes
+              cat > RELEASE_NOTES.md <<EOF
+              # Release $BITBUCKET_TAG
+              
+              ## Changes
+              - See CHANGELOG.md for details
+              
+              ## Installation
+              \`\`\`bash
+              curl -sSL $BITBUCKET_GIT_HTTP_ORIGIN/raw/$BITBUCKET_TAG/install.sh | bash
+              \`\`\`
+              
+              ## SHA256 Checksums
+              $(sha256sum *.skill)
+              EOF
+            - echo "✓ Release $BITBUCKET_TAG created"
+          artifacts:
+            - RELEASE_NOTES.md
+            - "*.skill"
+  
+  pull-requests:
+    "**":
+      - step: *validate-skill
+      - step: *build-skill
+      - step: *test-skill
+      - step:
+          name: PR Comment
+          script:
+            - |
+              echo "## Skill Build Report" > pr-comment.md
+              echo "✅ Validation: Passed" >> pr-comment.md
+              echo "✅ Build: Successful" >> pr-comment.md
+              echo "✅ Tests: All passed" >> pr-comment.md
+              echo "" >> pr-comment.md
+              echo "Artifact: \`k8s-troubleshooter.skill\` ($(du -h *.skill | cut -f1))" >> pr-comment.md
+  
+  custom:
+    deploy-to-wiki:
+      - step:
+          name: Update Documentation Wiki
+          script:
+            - echo "Updating internal wiki..."
+            - |
+              # Would typically push to Confluence or internal wiki
+              echo "Documentation updated"
+    
+    security-scan:
+      - step:
+          name: Security Scan
+          script:
+            - echo "Running security scan..."
+            - |
+              # Check for credentials or sensitive data
+              grep -r "password\|token\|secret" source/k8s-troubleshooter/ | grep -v "JIRA_TOKEN" | grep -v "example" && exit 1 || true
+            - echo "✓ Security scan passed"

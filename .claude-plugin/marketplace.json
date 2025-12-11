@@ -1,0 +1,18 @@
+{
+  "name": "dsipl1-claude-plugins-marketplace",
+  "owner": {
+    "name": "DSIPL1 DevOps Team",
+    "email": "jean-gert.nesselbosch@biotronik.com"
+  },
+  "plugins": [
+    {
+      "name": "k8s-troubleshooter",
+      "source": "./plugins/k8s-troubleshooter",
+      "description": "K8s Troubleshooting Plugin",
+      "version": "0.0.1",
+      "author": {
+        "name": "DSIPL1 DevOps Team"
+      }
+    }
+  ]
+}

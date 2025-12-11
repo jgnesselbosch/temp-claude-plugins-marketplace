@@ -1,0 +1,8 @@
+# K8s Troubleshooter - Session tracking files
+# These files should NEVER be committed to git
+k8s-changes-*.yaml
+backup-*.yaml
+
+# Temporary files
+*.tmp
+*.temp
