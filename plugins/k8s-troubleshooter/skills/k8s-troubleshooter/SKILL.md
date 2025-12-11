@@ -17,8 +17,9 @@ Interactive Kubernetes cluster troubleshooting skill with declarative change tra
 1. ❌ NEVER create files in the current working directory (it's usually a git repo!)
 2. ❌ NEVER use Write tool with paths like `C:\Users\...\dev\git\...`
 3. ❌ NEVER create `k8s-changes-*.yaml`, `backup-*.yaml`, or `fixed-*.yaml` in working directory
-4. ❌ NEVER ask user for permission for READ-ONLY operations (kubectl get, describe, logs, top, config view)
+4. ❌ NEVER ask user for permission for READ-ONLY operations (kubectl get, describe, logs, top, config view, ls, cat, etc.)
 5. ❌ NEVER ask user for permission to initialize session directory or manage session files
+6. ❌ NEVER use PowerShell commands (New-Item, Write-Host, etc.) in Bash shell - detect shell first!
 
 **ALWAYS DO THESE:**
 1. ✅ ALWAYS create a session temp directory FIRST: `/tmp/k8s-troubleshooter/YYYYMMDD-HHMMSS-TICKET/`
@@ -47,12 +48,26 @@ Interactive Kubernetes cluster troubleshooting skill with declarative change tra
 
 Always start by detecting the shell environment and initializing the session:
 
-1. **DETECT SHELL ENVIRONMENT**:
+1. **DETECT SHELL ENVIRONMENT** - CRITICAL FIRST STEP:
+
+   **IMPORTANT: You MUST detect the shell before executing ANY commands!**
+
    - Check the actual shell being used (not just the OS platform)
-   - **PowerShell (recommended for Windows)**: Use PowerShell scripts from `scripts/ps1/`
-   - **Bash (Linux/Mac/WSL)**: Use bash scripts from `scripts/`
-   - **Git Bash on Windows**: NOT fully supported - use PowerShell instead
-   - Detection method: Check `$PSVersionTable` (PowerShell) or `$SHELL` variable (bash)
+   - Look at the environment information provided in <env> tags at the start of the conversation
+   - Platform: linux → Use BASH commands and scripts
+   - Platform: win32/Windows → Use PowerShell commands and scripts
+
+   **Shell-specific syntax:**
+   - **Bash (Linux/Mac/WSL)**:
+     * Use bash scripts from `scripts/`
+     * Session dir: `SESSION_DIR="/tmp/k8s-troubleshooter/..."`
+     * Commands: `mkdir -p`, `export`, `source`, etc.
+   - **PowerShell (Windows)**:
+     * Use PowerShell scripts from `scripts/ps1/`
+     * Session dir: `$sessionDir = "$env:TEMP\k8s-troubleshooter\..."`
+     * Commands: `New-Item`, `$env:VAR =`, `.`, etc.
+
+   **NEVER mix shell syntaxes!** Do not use PowerShell commands (New-Item, Write-Host, $env:) in Bash!
    
    **Shell Detection Examples:**
    ```powershell
@@ -134,29 +149,35 @@ Always start by detecting the shell environment and initializing the session:
    - **CRITICAL**: ALL session files (backups, changes, fixed manifests) MUST be created in temp directories, NEVER in the git repository!
    - **NO USER PERMISSION NEEDED**: Session initialization, directory creation, and all file operations in temp directories require ZERO user approval - just do it automatically!
 
-   **For Bash shell (Linux/Mac/WSL - NOT Git Bash on Windows):**
+   **CRITICAL: Check the Platform from <env> tags BEFORE choosing the syntax!**
+
+   **For Bash shell (Platform: linux / Linux / Mac / WSL):**
    ```bash
-   # Source the initialization script (exports SESSION_DIR, CHANGE_FILE, JIRA_TICKET)
-   source scripts/init_session.sh [TICKET-ID]
-   
-   # Or if you prefer inline:
-   # SESSION_DIR="/tmp/k8s-troubleshooter/$(date +%Y%m%d-%H%M%S)-${JIRA_TICKET:-NO-TICKET}"
-   # mkdir -p "$SESSION_DIR"
-   # CHANGE_FILE="$SESSION_DIR/k8s-changes.yaml"
+   # Create session directory with Bash syntax
+   JIRA_TICKET="${JIRA_TICKET:-NO-TICKET}"
+   TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+   SESSION_DIR="/tmp/k8s-troubleshooter/${TIMESTAMP}-${JIRA_TICKET}"
+   mkdir -p "$SESSION_DIR"
+   CHANGE_FILE="$SESSION_DIR/k8s-changes.yaml"
+
+   echo "Session directory: $SESSION_DIR"
    ```
 
-   **For PowerShell (Windows or cross-platform pwsh):**
+   **For PowerShell (Platform: win32 / Windows):**
    ```powershell
-   # Run the initialization script (sets $env:K8S_SESSION_DIR, $env:K8S_CHANGE_FILE, $env:JIRA_TICKET)
-   .\scripts\ps1\Initialize-K8sSession.ps1 [TICKET-ID]
-   
-   # Or if you prefer inline:
-   # $jiraTicket = "TICKET-ID"
-   # $sessionDir = "$env:TEMP\k8s-troubleshooter\$(Get-Date -Format 'yyyyMMdd-HHmmss')-$jiraTicket"
-   # New-Item -ItemType Directory -Path $sessionDir -Force | Out-Null
-   # $env:K8S_SESSION_DIR = $sessionDir
-   # $env:K8S_CHANGE_FILE = "$sessionDir\k8s-changes-$jiraTicket.yaml"
+   # Create session directory with PowerShell syntax
+   $jiraTicket = "NO-TICKET"
+   $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+   $sessionDir = "$env:TEMP\k8s-troubleshooter\$timestamp-$jiraTicket"
+   New-Item -ItemType Directory -Path $sessionDir -Force | Out-Null
+   $env:K8S_SESSION_DIR = $sessionDir
+   $env:K8S_CHANGE_FILE = "$sessionDir\k8s-changes-$jiraTicket.yaml"
+
+   Write-Host "Session directory: $sessionDir"
    ```
+
+   **NEVER use PowerShell syntax ($env:, New-Item, Write-Host) on Linux/Bash platforms!**
+   **NEVER use Bash syntax (export, mkdir -p with $()) on Windows/PowerShell platforms!**
 
 6. **IMPORTANT FILE PATH RULES:**
 
@@ -199,7 +220,7 @@ For specific components:
 
 **NO USER PERMISSION NEEDED - EXECUTE IMMEDIATELY:**
 
-1. **READ operations** (kubectl read-only commands):
+1. **READ operations** (kubectl read-only commands and file viewing):
    - `kubectl get` (any resource, any namespace)
    - `kubectl describe` (any resource, any namespace)
    - `kubectl logs` (any pod/container)
@@ -207,7 +228,11 @@ For specific components:
    - `kubectl config view`
    - `kubectl config get-contexts`
    - `kubectl cluster-info`
-   - Any cluster inspection/viewing command that does NOT modify state
+   - `ls` (list files/directories)
+   - `cat` (view file contents)
+   - `head`, `tail` (view parts of files)
+   - `grep` (search in files)
+   - Any inspection/viewing command that does NOT modify state
 
 2. **SESSION MANAGEMENT operations** (all file operations in temp directories):
    - Creating session temp directory: `mkdir -p /tmp/k8s-troubleshooter/...` or `New-Item -ItemType Directory`
@@ -449,9 +474,10 @@ See references/argocd-troubleshooting.md for sync strategies.
    - Fixed manifests: fixed-*.yaml
    ```
 
-2. **CRITICAL WARNING - ALWAYS DISPLAY AT SESSION END (regardless of environment)**:
+2. **CRITICAL WARNING - MANDATORY TO DISPLAY AT SESSION END**:
 
-   ```
+   **IF ANY CLUSTER CHANGES WERE MADE (kubectl apply executed), YOU MUST DISPLAY THIS WARNING:**
+
    ╔══════════════════════════════════════════════════════════════╗
    ║                                                              ║
    ║  ⚠️  CRITICAL: GITOPS REPOSITORY UPDATE REQUIRED! ⚠️         ║
@@ -472,7 +498,8 @@ See references/argocd-troubleshooting.md for sync strategies.
    - backup-*.yaml: Rollback files
 
    ⚠️  WITHOUT GITOPS COMMIT, YOUR CHANGES WILL BE LOST ON NEXT SYNC! ⚠️
-   ```
+
+   **This warning is NOT optional - it MUST be displayed if any kubectl apply/delete/patch was executed!**
 
 3. **For production environments only** (additional to the warning above):
    - Show Jira ticket update instructions
@@ -533,6 +560,7 @@ Write-Host "Session directory: $sessionDir"
 
 1. **NEVER ask user permission for READ operations - execute immediately!**
    - `kubectl get`, `describe`, `logs`, `top`, `config view`, `cluster-info` - just do it!
+   - `ls`, `cat`, `head`, `tail`, `grep` - just do it!
    - Read operations need ZERO confirmation
 2. **NEVER ask user permission for SESSION MANAGEMENT operations - execute immediately!**
    - Creating session temp directories (`mkdir -p /tmp/k8s-troubleshooter/...`)
@@ -559,9 +587,11 @@ Write-Host "Session directory: $sessionDir"
    - DO NOT show verbose output unless debugging requires it
    - Only show critical information and actionable items
    - Silently perform all read-only operations WITHOUT asking
-10. **Session file finalization**:
+10. **Session file finalization - MANDATORY GITOPS WARNING**:
     - At session end, inform user where their session files are located in temp directory
-    - Only display GitOps integration instructions if in production or user requests it
+    - **CRITICAL**: If ANY kubectl write operations were executed (apply/delete/patch), YOU MUST display the GitOps warning from "Session Finalization" section
+    - The GitOps warning is MANDATORY whenever cluster state was modified
+    - Do NOT skip this warning - it prevents data loss!
 
 ## Error Recovery
 
