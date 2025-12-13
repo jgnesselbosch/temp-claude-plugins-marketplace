@@ -79,7 +79,7 @@ Change tracked in: /tmp/k8s-changes-20240105-143022.yaml
 ✓ Deployment updated successfully
 ```
 
-#### 3. Session-Zusammenfassung
+#### 3. Session-Zusammenfassung und Finalisierung
 ```bash
 > show all kubernetes changes from this session
 
@@ -89,6 +89,16 @@ Change tracked in: /tmp/k8s-changes-20240105-143022.yaml
 - Resources modified: Deployment(2), Service(1)
 
 View details: show-k8s-changes
+
+> finalize session
+
+[k8s-troubleshooter] Running finalization script...
+[k8s-troubleshooter] Generating session summary...
+[k8s-troubleshooter] Creating consolidated manifests...
+[k8s-troubleshooter] Updating knowledge base...
+
+✓ Session finalized successfully
+Files saved to: /tmp/k8s-troubleshooter/20240105-143022-PLAT-123/
 ```
 
 ## Befehle und Trigger-Phrasen
@@ -103,6 +113,9 @@ Der Skill reagiert auf natürliche Sprache:
 | "show k8s changes" | Änderungen anzeigen |
 | "fix deployment" | Deployment-Probleme beheben |
 | "crossplane xr not working" | Crossplane XR debuggen |
+| "finalize session" | Session beenden und finalisieren |
+| "session complete" | Session beenden und finalisieren |
+| "we're done" / "issue resolved" | Session beenden und finalisieren |
 
 ## Konfiguration
 
@@ -159,9 +172,16 @@ export JIRA_TOKEN="your-api-token"
 > apply changes after review
 ```
 
-### 3. Session dokumentieren
+### 3. Session finalisieren
 ```bash
-> finalize session and create git commit message
+> finalize session
+# This automatically:
+# - Generates session summary
+# - Creates consolidated manifests
+# - Generates rollback scripts
+# - Updates knowledge base
+# - Displays next steps for Git commit
+
 > update jira with session summary
 ```
 
@@ -291,14 +311,36 @@ payment-service-5d4b8c-m3nf2   0/1     Pending   0          5m
    Namespace: production
    Time: 2024-01-05 14:45:30
 
-> update jira INC-5432
-
-[Jira updated] Added comment with session summary and manifests
-
 > finalize session
 
-[Session finalized]
-- Changes saved to: /tmp/k8s-final-manifests-20240105.yaml
-- Rollback script: /tmp/k8s-rollback-20240105.sh
-- Please commit to Git: feature/INC-5432
+[Running finalization script...]
+
+=========================================
+  Kubernetes Session Finalization
+=========================================
+
+Session Summary:
+================
+Total Changes: 1
+Affected Namespaces: production
+  - Creates: 0
+  - Updates: 1
+  - Deletes: 0
+
+Resource Types Modified:
+  - deployment: 1
+
+Generated Files:
+================
+1. Summary: /tmp/k8s-troubleshooter/20240105-144530-INC-5432/k8s-session-summary.txt
+2. Final Manifests: /tmp/k8s-troubleshooter/20240105-144530-INC-5432/k8s-final-manifests.yaml
+3. Rollback Script: /tmp/k8s-troubleshooter/20240105-144530-INC-5432/k8s-rollback.sh
+4. Change Log: /tmp/k8s-troubleshooter/20240105-144530-INC-5432/k8s-changes.yaml
+
+Updating knowledge base...
+✓ Knowledge base updated successfully!
+
+⚠️  CRITICAL: Diese Änderungen MÜSSEN ins Git-Repository eingepflegt werden!
+
+Session erfolgreich abgeschlossen.
 ```

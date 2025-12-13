@@ -3,10 +3,13 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${GREEN}=========================================${NC}"
@@ -14,19 +17,41 @@ echo -e "${GREEN}  Kubernetes Session Finalization${NC}"
 echo -e "${GREEN}=========================================${NC}"
 echo ""
 
-# Find change file
-if [ -z "${CHANGE_FILE:-}" ]; then
-    CHANGE_FILE=$(ls -t /tmp/k8s-changes-*.yaml 2>/dev/null | head -1)
+# Find session directory and change file
+if [ -z "${SESSION_DIR:-}" ]; then
+    # Try to find most recent session directory
+    SESSION_DIR=$(ls -dt /tmp/k8s-troubleshooter/*/ 2>/dev/null | head -1 | sed 's:/$::')
 fi
 
-if [ -z "$CHANGE_FILE" ] || [ ! -f "$CHANGE_FILE" ]; then
-    echo -e "${YELLOW}No changes were tracked in this session.${NC}"
+if [ -z "${SESSION_DIR:-}" ] || [ ! -d "$SESSION_DIR" ]; then
+    echo -e "${YELLOW}No session directory found.${NC}"
+    echo "Expected: /tmp/k8s-troubleshooter/YYYYMMDD-HHMMSS-TICKET/"
     exit 0
 fi
 
-# Generate summary file
-SUMMARY_FILE="/tmp/k8s-session-summary-$(date +%Y%m%d-%H%M%S).txt"
-MANIFEST_FILE="/tmp/k8s-final-manifests-$(date +%Y%m%d-%H%M%S).yaml"
+# Find change file in session directory
+if [ -z "${CHANGE_FILE:-}" ]; then
+    CHANGE_FILE="$SESSION_DIR/k8s-changes.yaml"
+fi
+
+if [ ! -f "$CHANGE_FILE" ]; then
+    echo -e "${YELLOW}No changes were tracked in this session.${NC}"
+    echo "Session directory: $SESSION_DIR"
+    exit 0
+fi
+
+# Generate summary file in SESSION_DIR (not /tmp root)
+SUMMARY_FILE="$SESSION_DIR/k8s-session-summary.txt"
+MANIFEST_FILE="$SESSION_DIR/k8s-final-manifests.yaml"
+ROLLBACK_SCRIPT="$SESSION_DIR/k8s-rollback.sh"
+
+# Check if files already exist (avoid overwriting)
+if [ -f "$SUMMARY_FILE" ]; then
+    echo -e "${YELLOW}Summary file already exists: $SUMMARY_FILE${NC}"
+    echo "Using existing summary. To regenerate, delete the file first."
+    cat "$SUMMARY_FILE"
+    exit 0
+fi
 
 # Create summary header
 cat > "$SUMMARY_FILE" <<EOF
@@ -90,22 +115,30 @@ else
     echo "yamllint not installed, skipping validation"
 fi
 
-# Create rollback script
-ROLLBACK_SCRIPT="/tmp/k8s-rollback-$(date +%Y%m%d-%H%M%S).sh"
-cat > "$ROLLBACK_SCRIPT" <<'EOF'
+# Create rollback script (only if backups exist and script doesn't exist)
+if [ ! -f "$ROLLBACK_SCRIPT" ]; then
+    if ls "$SESSION_DIR"/backup-*.yaml 1> /dev/null 2>&1; then
+        cat > "$ROLLBACK_SCRIPT" <<EOF
 #!/bin/bash
 # Rollback script for this session's changes
+# Session: $SESSION_DIR
 echo "Rolling back Kubernetes changes..."
 
-# Apply backup files in reverse order
-for backup in $(ls -t /tmp/backup-*.yaml); do
-    echo "Applying $backup"
-    kubectl apply -f "$backup"
+# Apply backup files in reverse order from this session
+for backup in \$(ls -t "$SESSION_DIR"/backup-*.yaml 2>/dev/null); do
+    echo "Applying \$backup"
+    kubectl apply -f "\$backup"
 done
 
 echo "Rollback complete. Verify cluster state."
 EOF
-chmod +x "$ROLLBACK_SCRIPT"
+        chmod +x "$ROLLBACK_SCRIPT"
+    else
+        # No backups found, create a placeholder
+        ROLLBACK_SCRIPT="$SESSION_DIR/no-rollback-needed.txt"
+        echo "No backup files created - no rollback needed." > "$ROLLBACK_SCRIPT"
+    fi
+fi
 
 # Display summary
 echo ""
@@ -144,3 +177,40 @@ echo -e "${RED}⚠️  CRITICAL: Diese Änderungen MÜSSEN ins Git-Repository (B
 echo -e "${RED}   Dies ist essentiell für die GitOps-Compliance und Nachvollziehbarkeit!${NC}"
 echo ""
 echo -e "${GREEN}Session erfolgreich abgeschlossen.${NC}"
+
+# Copy summary to /tmp for knowledge base update (update_knowledge_base.sh expects files there)
+if [ -f "$SUMMARY_FILE" ]; then
+    TIMESTAMP=$(basename "$SESSION_DIR" | cut -d'-' -f1,2)
+    TICKET=$(basename "$SESSION_DIR" | cut -d'-' -f3)
+    KB_SUMMARY="/tmp/k8s-session-summary-${TIMESTAMP}-${TICKET}.txt"
+
+    # Only copy if not already there
+    if [ ! -f "$KB_SUMMARY" ]; then
+        cp "$SUMMARY_FILE" "$KB_SUMMARY"
+        echo ""
+        echo -e "${BLUE}Session summary copied to: $KB_SUMMARY${NC}"
+    fi
+fi
+
+if [ -z "${SKIP_KB_UPDATE:-}" ]; then
+    echo ""
+    echo -e "${BLUE}Updating knowledge base...${NC}"
+
+    # Try to find update_knowledge_base.sh in multiple locations
+    # SCRIPT_DIR is plugins/k8s-troubleshooter/skills/k8s-troubleshooter/scripts
+    # We need plugins/k8s-troubleshooter/scripts/update_knowledge_base.sh
+    KB_UPDATE_SCRIPT=""
+
+    if [ -f "$SCRIPT_DIR/../../../scripts/update_knowledge_base.sh" ]; then
+        KB_UPDATE_SCRIPT="$SCRIPT_DIR/../../../scripts/update_knowledge_base.sh"
+    elif [ -f "$SCRIPT_DIR/../../scripts/update_knowledge_base.sh" ]; then
+        KB_UPDATE_SCRIPT="$SCRIPT_DIR/../../scripts/update_knowledge_base.sh"
+    fi
+
+    if [ -n "$KB_UPDATE_SCRIPT" ]; then
+        bash "$KB_UPDATE_SCRIPT" || true
+    else
+        echo -e "${YELLOW}Knowledge base update script not found${NC}"
+        echo "Looked in: $SCRIPT_DIR/../../../scripts/ and $SCRIPT_DIR/../../scripts/"
+    fi
+fi

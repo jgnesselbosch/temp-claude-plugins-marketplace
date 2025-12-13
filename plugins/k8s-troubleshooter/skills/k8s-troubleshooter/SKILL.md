@@ -25,7 +25,7 @@ Interactive Kubernetes cluster troubleshooting skill with declarative change tra
 1. ✅ ALWAYS create a session temp directory FIRST: `/tmp/k8s-troubleshooter/YYYYMMDD-HHMMSS-TICKET/`
 2. ✅ ALWAYS put ALL session files (changes, backups, manifests) in that temp directory
 3. ✅ ALWAYS use the temp directory variable for all file operations
-4. ✅ At session end, tell user where the temp directory is located
+4. ✅ At session end, EXECUTE finalization script: `bash scripts/finalize_session.sh` (Bash) or `.\scripts\ps1\Finalize-K8sSession.ps1` (PowerShell)
 5. ✅ ALWAYS use Write tool to create fixed manifests (AI-driven, not manual editing)
 6. ✅ ALWAYS clean Kubernetes metadata (resourceVersion, uid, status) from fixed manifests
 7. ✅ ALWAYS execute READ-ONLY kubectl commands immediately without asking (get, describe, logs, top, config view, etc.)
@@ -36,7 +36,8 @@ Interactive Kubernetes cluster troubleshooting skill with declarative change tra
 - [ ] Set SESSION_DIR variable
 - [ ] Initialize change tracking file in SESSION_DIR
 - [ ] Reference AI_MANIFEST_EDITING_GUIDE.md for creating fixed manifests
-- [ ] Only then start troubleshooting
+- [ ] Do troubleshooting work
+- [ ] **EXECUTE finalization script when done** (scripts/finalize_session.sh or ps1/Finalize-K8sSession.ps1)
 
 ## Core Workflow
 
@@ -458,7 +459,30 @@ See references/argocd-troubleshooting.md for sync strategies.
 
 ## Session Finalization
 
-**At session end, ALWAYS display this information**:
+**At session end, ALWAYS execute the finalization script**:
+
+**CRITICAL: You MUST execute the finalize_session.sh script when the user indicates the troubleshooting session is complete or when you've finished resolving the issue.**
+
+**For Bash/Linux:**
+```bash
+# Execute finalization script
+bash scripts/finalize_session.sh
+```
+
+**For PowerShell/Windows:**
+```powershell
+# Execute finalization script
+.\scripts\ps1\Finalize-K8sSession.ps1
+```
+
+The finalization script will:
+1. Generate a comprehensive session summary with statistics
+2. Create consolidated manifest files for GitOps
+3. Generate rollback scripts
+4. Update the knowledge base with learnings from this session
+5. Display all necessary warnings and next steps
+
+**If you cannot execute the script (missing or errors), THEN display this information manually**:
 
 1. **Display brief summary**:
    - Total changes made
@@ -587,11 +611,13 @@ Write-Host "Session directory: $sessionDir"
    - DO NOT show verbose output unless debugging requires it
    - Only show critical information and actionable items
    - Silently perform all read-only operations WITHOUT asking
-10. **Session file finalization - MANDATORY GITOPS WARNING**:
-    - At session end, inform user where their session files are located in temp directory
-    - **CRITICAL**: If ANY kubectl write operations were executed (apply/delete/patch), YOU MUST display the GitOps warning from "Session Finalization" section
-    - The GitOps warning is MANDATORY whenever cluster state was modified
-    - Do NOT skip this warning - it prevents data loss!
+10. **Session finalization - MANDATORY**:
+    - **CRITICAL**: When troubleshooting is complete, ALWAYS execute the finalization script:
+      * Bash: `bash scripts/finalize_session.sh`
+      * PowerShell: `.\scripts\ps1\Finalize-K8sSession.ps1`
+    - The script handles: summary generation, manifest consolidation, rollback scripts, and knowledge base updates
+    - **CRITICAL**: If ANY kubectl write operations were executed (apply/delete/patch), the GitOps warning is MANDATORY
+    - Do NOT skip finalization - it updates the learning system and prevents data loss!
 
 ## Error Recovery
 
