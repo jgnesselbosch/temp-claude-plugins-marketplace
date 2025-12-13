@@ -19,123 +19,126 @@ class SessionLearningExtractor:
         self.patterns = defaultdict(list)
         self.solutions = defaultdict(list)
         
-    def analyze_session(self, summary_file: Path, change_file: Path) -> Dict:
+    def analyze_session(self, summary_file: Path, learning_report: Path = None) -> Dict:
         """Analyze a single session and extract learnings."""
         learning = {
             'date': None,
             'jira_ticket': None,
-            'problem_type': None,
-            'resources_affected': [],
-            'solution_steps': [],
-            'outcome': None,
-            'patterns': []
+            'problem_description': None,
+            'investigation': None,
+            'root_cause': None,
+            'solution': None,
+            'resources_modified': [],
+            'key_learnings': [],
+            'prevention': None,
+            'namespaces': []
         }
-        
-        # Parse summary file
+
+        # Parse summary file for metadata
         if summary_file.exists():
             with open(summary_file) as f:
                 content = f.read()
-                
+
             # Extract metadata
             if match := re.search(r'Date:\s+(.+)', content):
                 learning['date'] = match.group(1).strip()
             if match := re.search(r'Jira Ticket:\s+(.+)', content):
                 learning['jira_ticket'] = match.group(1).strip()
             if match := re.search(r'Affected Namespaces:\s+(.+)', content):
-                learning['resources_affected'] = match.group(1).strip().split()
-                
-        # Parse change file to understand what was done
-        if change_file.exists():
-            with open(change_file) as f:
-                changes = list(yaml.safe_load_all(f))
-                
-            for change in changes:
-                if change and isinstance(change, dict):
-                    # Extract patterns from changes
-                    if 'kind' in change:
-                        resource_type = change['kind']
-                        learning['solution_steps'].append({
-                            'type': resource_type,
-                            'action': self._infer_action(change),
-                            'context': self._extract_context(change)
-                        })
-        
-        # Infer problem type from changes
-        learning['problem_type'] = self._infer_problem_type(learning['solution_steps'])
-        
+                learning['namespaces'] = match.group(1).strip().split()
+
+        # Parse learning report if it exists (this is the rich content!)
+        if learning_report and learning_report.exists():
+            with open(learning_report) as f:
+                content = f.read()
+
+            # Extract structured sections
+            learning['problem_description'] = self._extract_section(content, 'Problem Description')
+            learning['investigation'] = self._extract_section(content, 'Investigation')
+            learning['root_cause'] = self._extract_section(content, 'Root Cause')
+            learning['solution'] = self._extract_section(content, 'Solution')
+            learning['prevention'] = self._extract_section(content, 'Prevention')
+
+            # Extract resources modified (bullet list)
+            resources_section = self._extract_section(content, 'Resources Modified')
+            if resources_section:
+                learning['resources_modified'] = [
+                    line.strip('- ').strip()
+                    for line in resources_section.split('\n')
+                    if line.strip().startswith('-')
+                ]
+
+            # Extract key learnings (bullet list)
+            learnings_section = self._extract_section(content, 'Key Learnings')
+            if learnings_section:
+                learning['key_learnings'] = [
+                    line.strip('- ').strip()
+                    for line in learnings_section.split('\n')
+                    if line.strip().startswith('-')
+                ]
+
         return learning
+
+    def _extract_section(self, content: str, section_name: str) -> str:
+        """Extract a section from the learning report markdown."""
+        pattern = rf'##\s+{re.escape(section_name)}\s*\n(.+?)(?=\n##|\Z)'
+        match = re.search(pattern, content, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return None
     
-    def _infer_action(self, manifest: Dict) -> str:
-        """Infer what action was taken based on the manifest."""
-        if not manifest:
-            return 'unknown'
-            
-        # Look for common troubleshooting patterns
-        if manifest.get('kind') == 'Pod':
-            if 'restartPolicy' in str(manifest):
-                return 'restart_policy_fix'
-        elif manifest.get('kind') == 'Deployment':
-            if 'replicas' in str(manifest):
-                return 'scaling_adjustment'
-            if 'resources' in str(manifest):
-                return 'resource_limit_fix'
-        
-        return 'configuration_update'
-    
-    def _extract_context(self, manifest: Dict) -> Dict:
-        """Extract relevant context from manifest."""
-        context = {}
-        
-        if manifest.get('kind') == 'Deployment':
-            spec = manifest.get('spec', {})
-            context['replicas'] = spec.get('replicas')
-            
-            template_spec = spec.get('template', {}).get('spec', {})
-            containers = template_spec.get('containers', [])
-            if containers:
-                context['image'] = containers[0].get('image')
-                context['resources'] = containers[0].get('resources', {})
-        
-        return context
-    
-    def _infer_problem_type(self, steps: List[Dict]) -> str:
-        """Infer the type of problem from solution steps."""
-        if not steps:
-            return 'unknown'
-        
-        # Pattern matching on solution steps
-        actions = [step['action'] for step in steps]
-        
-        if 'restart_policy_fix' in actions:
-            return 'pod_crashloop'
-        elif 'resource_limit_fix' in actions:
-            return 'resource_constraints'
-        elif 'scaling_adjustment' in actions:
-            return 'capacity_issue'
-        
-        return 'configuration_issue'
+    def _categorize_problem(self, learning: Dict) -> str:
+        """Categorize the problem type based on description and root cause."""
+        problem_desc = (learning.get('problem_description') or '').lower()
+        root_cause = (learning.get('root_cause') or '').lower()
+        combined = problem_desc + ' ' + root_cause
+
+        # Pattern matching on problem description
+        if 'oom' in combined or 'out of memory' in combined or 'memory limit' in combined:
+            return 'Memory / OOM Issues'
+        elif 'crashloop' in combined or 'crash' in combined:
+            return 'Pod CrashLoopBackOff'
+        elif 'image' in combined and ('pull' in combined or 'not found' in combined):
+            return 'Image Pull Errors'
+        elif 'pending' in combined or 'scheduling' in combined:
+            return 'Pod Scheduling Issues'
+        elif 'network' in combined or 'dns' in combined or 'connection' in combined:
+            return 'Network / DNS Issues'
+        elif 'argocd' in combined or 'sync' in combined:
+            return 'ArgoCD Sync Issues'
+        elif 'tekton' in combined or 'pipeline' in combined:
+            return 'Tekton Pipeline Issues'
+        elif 'crossplane' in combined:
+            return 'Crossplane Issues'
+        elif 'storage' in combined or 'pvc' in combined or 'volume' in combined:
+            return 'Storage / PVC Issues'
+        elif 'permission' in combined or 'rbac' in combined or 'forbidden' in combined:
+            return 'RBAC / Permission Issues'
+
+        return 'Configuration Issues'
     
     def extract_patterns(self, learnings: List[Dict]) -> Dict:
         """Extract common patterns from multiple sessions."""
         patterns = {
-            'problem_types': defaultdict(int),
-            'common_fixes': defaultdict(list),
+            'problem_categories': defaultdict(list),
             'namespace_patterns': defaultdict(int),
-            'success_rate_by_type': defaultdict(lambda: {'success': 0, 'total': 0})
+            'all_learnings': []
         }
-        
+
         for learning in learnings:
-            problem_type = learning.get('problem_type', 'unknown')
-            patterns['problem_types'][problem_type] += 1
-            
-            # Track which fixes work for which problems
-            for step in learning.get('solution_steps', []):
-                patterns['common_fixes'][problem_type].append(step['action'])
-            
+            # Categorize this problem
+            category = self._categorize_problem(learning)
+
+            # Group learnings by category
+            patterns['problem_categories'][category].append(learning)
+
             # Track namespace patterns
-            for ns in learning.get('resources_affected', []):
+            for ns in learning.get('namespaces', []):
                 patterns['namespace_patterns'][ns] += 1
-        
+
+            # Collect all key learnings
+            patterns['all_learnings'].extend(learning.get('key_learnings', []))
+
         return patterns
     
     def generate_knowledge_base_update(self, patterns: Dict, learnings: List[Dict]) -> str:
@@ -147,43 +150,80 @@ Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 Total Sessions Analyzed: {len(learnings)}
 
-## Common Problem Patterns
+## Problem Categories and Solutions
 
 """
-        # Add problem type frequencies
-        for problem_type, count in sorted(patterns['problem_types'].items(), 
-                                         key=lambda x: x[1], reverse=True):
-            md += f"### {problem_type.replace('_', ' ').title()}\n"
-            md += f"Occurrences: {count}\n\n"
-            
-            # Add common fixes for this problem type
-            fixes = patterns['common_fixes'].get(problem_type, [])
-            if fixes:
-                fix_counts = defaultdict(int)
-                for fix in fixes:
-                    fix_counts[fix] += 1
-                
-                md += "**Common Solutions:**\n"
-                for fix, fix_count in sorted(fix_counts.items(), 
-                                            key=lambda x: x[1], reverse=True):
-                    md += f"- {fix.replace('_', ' ').title()} ({fix_count} times)\n"
-                md += "\n"
-        
+        # Add each problem category with its solutions
+        for category, category_learnings in sorted(patterns['problem_categories'].items(),
+                                                   key=lambda x: len(x[1]), reverse=True):
+            md += f"### {category}\n\n"
+            md += f"**Occurrences:** {len(category_learnings)} session(s)\n\n"
+
+            # Show each incident in this category
+            for learning in category_learnings:
+                ticket = learning.get('jira_ticket', 'N/A')
+                if ticket and ticket != 'Not specified':
+                    md += f"#### {ticket}\n"
+                else:
+                    md += f"#### Session from {learning.get('date', 'Unknown')}\n"
+
+                # Problem description
+                if learning.get('problem_description'):
+                    md += f"\n**Problem:** {learning['problem_description'][:200]}"
+                    if len(learning['problem_description']) > 200:
+                        md += "..."
+                    md += "\n\n"
+
+                # Root cause
+                if learning.get('root_cause'):
+                    md += f"**Root Cause:** {learning['root_cause'][:150]}"
+                    if len(learning['root_cause']) > 150:
+                        md += "..."
+                    md += "\n\n"
+
+                # Solution summary
+                if learning.get('solution'):
+                    md += f"**Solution:** {learning['solution'][:150]}"
+                    if len(learning['solution']) > 150:
+                        md += "..."
+                    md += "\n\n"
+
+                # Resources modified
+                if learning.get('resources_modified'):
+                    md += "**Resources Modified:**\n"
+                    for resource in learning['resources_modified'][:3]:  # Limit to 3
+                        md += f"- {resource}\n"
+                    md += "\n"
+
+                md += "---\n\n"
+
         # Add namespace insights
         md += "## Namespace Activity Patterns\n\n"
-        for ns, count in sorted(patterns['namespace_patterns'].items(), 
-                               key=lambda x: x[1], reverse=True)[:10]:
-            md += f"- `{ns}`: {count} incidents\n"
-        
-        md += "\n## Recent Solutions\n\n"
-        # Add last 10 solutions
-        for learning in learnings[-10:]:
-            if learning.get('jira_ticket') and learning['jira_ticket'] != 'Not specified':
-                md += f"### {learning['jira_ticket']}\n"
-                md += f"Date: {learning.get('date', 'Unknown')}\n"
-                md += f"Problem Type: {learning.get('problem_type', 'Unknown')}\n"
-                md += f"Resources: {', '.join(learning.get('resources_affected', []))}\n\n"
-        
+        if patterns['namespace_patterns']:
+            for ns, count in sorted(patterns['namespace_patterns'].items(),
+                                   key=lambda x: x[1], reverse=True)[:10]:
+                md += f"- `{ns}`: {count} incident(s)\n"
+        else:
+            md += "*No namespace data available yet*\n"
+
+        # Add aggregated key learnings
+        md += "\n## Key Learnings Across All Sessions\n\n"
+        if patterns['all_learnings']:
+            # Deduplicate and show unique learnings
+            unique_learnings = list(set(patterns['all_learnings']))
+            for learning_item in unique_learnings[:20]:  # Top 20
+                md += f"- {learning_item}\n"
+        else:
+            md += "*No learnings captured yet*\n"
+
+        md += "\n---\n\n"
+        md += "## How to Use This Knowledge Base\n\n"
+        md += "When troubleshooting similar issues:\n"
+        md += "1. Find your problem category above\n"
+        md += "2. Review past root causes and solutions\n"
+        md += "3. Apply similar fixes to your situation\n"
+        md += "4. Check namespace-specific patterns\n\n"
+
         return md
 
 def main():
@@ -202,40 +242,59 @@ def main():
     
     extractor = SessionLearningExtractor(session_dir)
     learnings = []
-    
-    # Find all session files
+
+    # Find all session summary files (both old and new locations)
     summary_files = list(session_dir.glob('k8s-session-summary-*.txt'))
+
+    # Also check for session directories
+    session_dirs = [d for d in session_dir.glob('*') if d.is_dir() and d.name.startswith('2')]
+    for session_subdir in session_dirs:
+        summary_in_dir = session_subdir / 'k8s-session-summary.txt'
+        if summary_in_dir.exists():
+            summary_files.append(summary_in_dir)
+
     print(f"Found {len(summary_files)} session summaries")
-    
+
     for summary_file in summary_files:
-        # Find corresponding change file
-        timestamp = summary_file.name.replace('k8s-session-summary-', '').replace('.txt', '')
-        change_file = session_dir / f'k8s-changes-{timestamp}.yaml'
-        
-        if not change_file.exists():
-            # Try to find any change file with similar timestamp
-            change_files = list(session_dir.glob(f'k8s-changes-*.yaml'))
-            if change_files:
-                change_file = change_files[0]
-        
-        learning = extractor.analyze_session(summary_file, change_file)
+        # Try to find corresponding learning report
+        learning_report = None
+
+        # Check if summary is in a session directory
+        if summary_file.parent != session_dir:
+            # It's in a subdirectory - look for learning report there
+            learning_report = summary_file.parent / 'session-learning-report.md'
+        else:
+            # Old format - try to match by timestamp
+            timestamp = summary_file.name.replace('k8s-session-summary-', '').replace('.txt', '')
+            # Look for session directory with this timestamp
+            for session_subdir in session_dirs:
+                if timestamp in session_subdir.name:
+                    learning_report = session_subdir / 'session-learning-report.md'
+                    break
+
+        learning = extractor.analyze_session(summary_file, learning_report)
         learnings.append(learning)
-        print(f"Analyzed: {summary_file.name}")
-    
+
+        if learning_report and learning_report.exists():
+            print(f"✓ Analyzed: {summary_file.name} (with learning report)")
+        else:
+            print(f"⚠ Analyzed: {summary_file.name} (no learning report found)")
+
     # Extract patterns
     patterns = extractor.extract_patterns(learnings)
-    
+
     # Generate knowledge base
     kb_content = extractor.generate_knowledge_base_update(patterns, learnings)
-    
+
     # Write output
     with open(output_file, 'w') as f:
         f.write(kb_content)
-    
+
     print(f"\n✓ Knowledge base written to: {output_file}")
     print(f"  - Analyzed {len(learnings)} sessions")
-    print(f"  - Identified {len(patterns['problem_types'])} problem types")
+    print(f"  - Identified {len(patterns['problem_categories'])} problem categories")
     print(f"  - Tracked {len(patterns['namespace_patterns'])} namespaces")
+    print(f"  - Collected {len(patterns['all_learnings'])} key learnings")
 
 if __name__ == '__main__':
     main()

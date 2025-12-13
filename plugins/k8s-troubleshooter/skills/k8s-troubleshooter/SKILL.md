@@ -37,6 +37,7 @@ Interactive Kubernetes cluster troubleshooting skill with declarative change tra
 - [ ] Initialize change tracking file in SESSION_DIR
 - [ ] Reference AI_MANIFEST_EDITING_GUIDE.md for creating fixed manifests
 - [ ] Do troubleshooting work
+- [ ] **WRITE session learning report** ($SESSION_DIR/session-learning-report.md)
 - [ ] **EXECUTE finalization script when done** (scripts/finalize_session.sh or ps1/Finalize-K8sSession.ps1)
 
 ## Core Workflow
@@ -459,9 +460,83 @@ See references/argocd-troubleshooting.md for sync strategies.
 
 ## Session Finalization
 
-**At session end, ALWAYS execute the finalization script**:
+**At session end, ALWAYS do these TWO steps**:
 
-**CRITICAL: You MUST execute the finalize_session.sh script when the user indicates the troubleshooting session is complete or when you've finished resolving the issue.**
+### Step 1: Write Session Learning Report
+
+**CRITICAL: Before running finalization, you MUST create a structured learning report for the knowledge base.**
+
+Create a file `$SESSION_DIR/session-learning-report.md` (or `$env:K8S_SESSION_DIR\session-learning-report.md` on Windows) with this structure:
+
+```markdown
+# Session Learning Report
+
+## Problem Description
+[Describe the issue that was reported - symptoms, error messages, user complaints]
+
+## Investigation
+[Describe how you investigated - what commands you ran, what you discovered]
+
+## Root Cause
+[Explain what was actually wrong and why it caused the problem]
+
+## Solution
+[Describe what you changed and why this fixes the problem]
+
+## Resources Modified
+- Resource type/name in namespace
+- What was changed (e.g., "increased memory limit from 512Mi to 2Gi")
+
+## Key Learnings
+- [Important insights from this session]
+- [Patterns to watch for in the future]
+- [Best practices discovered]
+
+## Prevention
+[How to prevent this issue from happening again]
+```
+
+**Example:**
+```markdown
+# Session Learning Report
+
+## Problem Description
+Payment service pods were stuck in CrashLoopBackOff state. Users reported failed transactions.
+Error message: "OOMKilled - container exceeded memory limit"
+
+## Investigation
+- Checked pod status: All 3 replicas in CrashLoopBackOff
+- Reviewed logs: Container killed due to OOM (Out of Memory)
+- Checked metrics: Memory usage spiking to 512Mi (the limit)
+- Identified recent code deployment added new caching layer
+
+## Root Cause
+Recent deployment (v2.3.0) introduced Redis caching that increased memory usage from ~300Mi to ~600Mi,
+but memory limit was still set at 512Mi from older version.
+
+## Solution
+Increased memory limit and request to handle new caching requirements:
+- Memory request: 256Mi → 768Mi
+- Memory limit: 512Mi → 1Gi
+
+## Resources Modified
+- deployment/payment-service in production namespace
+  - Updated container memory limits and requests
+
+## Key Learnings
+- Always review resource requirements when adding new dependencies (Redis cache)
+- Memory limits should have headroom for traffic spikes (set limit 30% above typical usage)
+- Monitor memory trends after deployments
+
+## Prevention
+- Add memory monitoring alerts at 80% of limit
+- Include resource requirement review in deployment checklist
+- Document typical resource usage for each service
+```
+
+### Step 2: Execute Finalization Script
+
+**After creating the learning report, execute the finalization script:**
 
 **For Bash/Linux:**
 ```bash
@@ -479,8 +554,9 @@ The finalization script will:
 1. Generate a comprehensive session summary with statistics
 2. Create consolidated manifest files for GitOps
 3. Generate rollback scripts
-4. Update the knowledge base with learnings from this session
-5. Display all necessary warnings and next steps
+4. Extract learnings from your session-learning-report.md
+5. Update the knowledge base with these learnings
+6. Display all necessary warnings and next steps
 
 **If you cannot execute the script (missing or errors), THEN display this information manually**:
 

@@ -121,9 +121,71 @@ ls -la "$SESSION_DIR"
 
 None - this is purely additive. Old sessions without finalization still work, they just won't have the automated summary generation.
 
+## Knowledge Base Learning System (NEW)
+
+### Problem with Original Approach
+The original `extract_learnings.py` only extracted metadata (dates, tickets, namespaces) from YAML files, resulting in useless knowledge base entries like:
+```
+### Unknown
+Occurrences: 1
+```
+
+### New Approach - Session Learning Reports
+
+**Added structured learning reports** that capture the actual troubleshooting story:
+
+1. **New File**: `session-learning-report.md` created by Claude during finalization
+2. **Updated SKILL.md** (lines 464-558) with:
+   - **Step 1**: Instructions to write structured learning report before finalization
+   - Complete template with sections: Problem Description, Investigation, Root Cause, Solution, Key Learnings, Prevention
+   - Example showing real troubleshooting narrative (OOMKilled payment service)
+
+3. **Completely Rewrote** `extract_learnings.py`:
+   - New `analyze_session()` method extracts from learning reports using markdown parsing
+   - New `_extract_section()` method to parse markdown sections
+   - New `_categorize_problem()` method for intelligent problem classification (11 categories)
+   - New `extract_patterns()` groups learnings by category
+   - New `generate_knowledge_base_update()` creates rich, actionable knowledge base
+
+### Knowledge Base Output Now Includes
+
+✅ **Problem Categories**: Memory/OOM, CrashLoopBackOff, Image Pull Errors, Network/DNS, ArgoCD Sync, Tekton Pipelines, Crossplane, Storage/PVC, RBAC, etc.
+
+✅ **For Each Incident**:
+- Problem description (what went wrong)
+- Root cause analysis (why it happened)
+- Solution applied (what fixed it)
+- Resources modified
+- Key learnings and prevention tips
+
+✅ **Aggregated Insights**:
+- Namespace activity patterns
+- Deduplicated key learnings across all sessions
+- Usage instructions
+
+### Example Knowledge Base Entry
+
+```markdown
+### Memory / OOM Issues
+
+**Occurrences:** 1 session(s)
+
+#### PLAT-5432
+
+**Problem:** Payment service pods stuck in CrashLoopBackOff. Error: "OOMKilled - container exceeded memory limit"
+
+**Root Cause:** Recent deployment (v2.3.0) introduced Redis caching that increased memory usage from ~300Mi to ~600Mi, but memory limit was still 512Mi
+
+**Solution:** Increased memory limit and request to handle new caching: Memory request 256Mi → 768Mi, Memory limit 512Mi → 1Gi
+
+**Resources Modified:**
+- deployment/payment-service in production namespace - Updated container memory limits
+```
+
 ## Future Improvements
 
 - Add PowerShell version of `update_knowledge_base.sh` (currently only bash)
 - Add session analytics dashboard
 - Integrate with Git to auto-create feature branches
 - Add automated Jira comment posting with session summary
+- Create PowerShell equivalent of extract_learnings.py for full Windows support
