@@ -246,8 +246,14 @@ def main():
     # Find all session summary files (both old and new locations)
     summary_files = list(session_dir.glob('k8s-session-summary-*.txt'))
 
-    # Also check for session directories
+    # Also check for session directories (both directly in session_dir and in k8s-troubleshooter subdir)
     session_dirs = [d for d in session_dir.glob('*') if d.is_dir() and d.name.startswith('2')]
+
+    # Also check in k8s-troubleshooter subdirectory
+    k8s_troubleshooter_dir = session_dir / 'k8s-troubleshooter'
+    if k8s_troubleshooter_dir.exists():
+        session_dirs.extend([d for d in k8s_troubleshooter_dir.glob('*') if d.is_dir() and d.name.startswith('2')])
+
     for session_subdir in session_dirs:
         summary_in_dir = session_subdir / 'k8s-session-summary.txt'
         if summary_in_dir.exists():
