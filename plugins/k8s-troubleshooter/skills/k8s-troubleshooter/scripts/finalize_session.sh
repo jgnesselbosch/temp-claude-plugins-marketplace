@@ -46,14 +46,16 @@ MANIFEST_FILE="$SESSION_DIR/k8s-final-manifests.yaml"
 ROLLBACK_SCRIPT="$SESSION_DIR/k8s-rollback.sh"
 
 # Check if files already exist (avoid overwriting)
+SKIP_SUMMARY_GEN=false
 if [ -f "$SUMMARY_FILE" ]; then
     echo -e "${YELLOW}Summary file already exists: $SUMMARY_FILE${NC}"
     echo "Using existing summary. To regenerate, delete the file first."
     cat "$SUMMARY_FILE"
-    exit 0
+    SKIP_SUMMARY_GEN=true
 fi
 
-# Create summary header
+# Create summary header (only if not skipping)
+if [ "$SKIP_SUMMARY_GEN" = false ]; then
 cat > "$SUMMARY_FILE" <<EOF
 Kubernetes Troubleshooting Session Summary
 ==========================================
@@ -101,6 +103,8 @@ echo "" >> "$MANIFEST_FILE"
 
 # Process and clean manifests
 grep -v "^#" "$CHANGE_FILE" >> "$MANIFEST_FILE"
+
+fi  # End of SKIP_SUMMARY_GEN check
 
 # Validate YAML
 echo ""
@@ -208,7 +212,9 @@ if [ -z "${SKIP_KB_UPDATE:-}" ]; then
     fi
 
     if [ -n "$KB_UPDATE_SCRIPT" ]; then
-        bash "$KB_UPDATE_SCRIPT" || true
+        # Pass the parent directory of SESSION_DIR (e.g., /tmp/k8s-troubleshooter)
+        SESSION_PARENT_DIR=$(dirname "$SESSION_DIR")
+        SESSION_DIR="$SESSION_PARENT_DIR" bash "$KB_UPDATE_SCRIPT" || true
     else
         echo -e "${YELLOW}Knowledge base update script not found${NC}"
         echo "Looked in: $SCRIPT_DIR/../../../scripts/ and $SCRIPT_DIR/../../scripts/"

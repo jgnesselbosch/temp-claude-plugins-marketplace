@@ -1,6 +1,6 @@
 {
   "name": "k8s-troubleshooter",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Plugin to troubleshoot hairy K8s situations",
   "author": {
     "name": "Jean-Gert Nesselbosch",
@@ -10,5 +10,6 @@
   
   "repository": "https://github.com/biotronikdev/dsipl1-claude-plugins-marketplace/tree/main/.claude-plugin/k8s-troubleshooter"
 }
+
 
 
