@@ -1,6 +1,6 @@
 {
   "name": "k8s-troubleshooter",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Plugin to troubleshoot hairy K8s situations",
   "author": {
     "name": "Jean-Gert Nesselbosch",

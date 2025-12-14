@@ -79,7 +79,7 @@ Problems are automatically categorized into:
 
 When troubleshooting a new issue:
 
-1. **Open the knowledge base**: `references/session-knowledge.md`
+1. **Open the knowledge base**: `~/.claude/skills/k8s-troubleshooter/session-knowledge.md`
 2. **Find your problem category**: Look for similar symptoms
 3. **Review past solutions**: See what worked before
 4. **Apply similar fixes**: Adapt the solution to your situation
@@ -108,29 +108,30 @@ When troubleshooting a new issue:
 
 # 6. Next time similar issue occurs
 > Check knowledge base for OOM issues
-[References/session-knowledge.md shows past memory issues and solutions]
+[~/.claude/skills/k8s-troubleshooter/session-knowledge.md shows past memory issues and solutions]
 ```
 
 ## File Locations
 
 ```
+~/.claude/skills/k8s-troubleshooter/
+└── session-knowledge.md              # Generated knowledge base (read by Claude)
+
 plugins/k8s-troubleshooter/
 ├── scripts/
 │   ├── extract_learnings.py          # Parses learning reports, updates KB
 │   └── update_knowledge_base.sh      # Wrapper script
-├── skills/k8s-troubleshooter/
-│   ├── references/
-│   │   └── session-knowledge.md      # Generated knowledge base (read by Claude)
-│   └── scripts/
-│       └── finalize_session.sh       # Calls knowledge base update
-└── /tmp/k8s-troubleshooter/
-    └── YYYYMMDD-HHMMSS-TICKET/
-        ├── session-learning-report.md     # Your learning report
-        ├── k8s-session-summary.txt        # Auto-generated stats
-        └── k8s-changes.yaml               # Change tracking
+└── skills/k8s-troubleshooter/
+    └── scripts/
+        └── finalize_session.sh       # Calls knowledge base update
 
-# KB update also reads from:
-/tmp/k8s-session-summary-*.txt  # Copied summaries for KB processing
+/tmp/k8s-troubleshooter/
+└── YYYYMMDD-HHMMSS-TICKET/
+    ├── session-learning-report.md     # Your learning report
+    ├── k8s-session-summary.txt        # Auto-generated stats
+    └── k8s-changes.yaml               # Change tracking
+
+/tmp/k8s-session-summary-*.txt        # Copied summaries for KB processing
 ```
 
 ## Best Practices
@@ -188,7 +189,7 @@ Provides 40% headroom above typical usage.
 
 ### Reviewing the Knowledge Base
 
-Periodically review `references/session-knowledge.md`:
+Periodically review `~/.claude/skills/k8s-troubleshooter/session-knowledge.md`:
 - Look for recurring patterns
 - Identify systemic issues
 - Update infrastructure based on trends
@@ -196,7 +197,7 @@ Periodically review `references/session-knowledge.md`:
 
 ### Manual Updates
 
-You can manually edit `references/session-knowledge.md` to:
+You can manually edit `~/.claude/skills/k8s-troubleshooter/session-knowledge.md` to:
 - Add important context
 - Document known gotchas
 - Link to external documentation
@@ -224,7 +225,7 @@ This is normal for old sessions created before the learning report feature was a
 1. Check if `extract_learnings.py` exists and is executable
 2. Verify Python 3 is installed: `python3 --version`
 3. Check for errors in finalization output
-4. Manually run: `python3 scripts/extract_learnings.py /tmp references/session-knowledge.md`
+4. Manually run: `python3 scripts/extract_learnings.py /tmp ~/.claude/skills/k8s-troubleshooter/session-knowledge.md`
 
 ### Knowledge Base Has Generic Entries
 
